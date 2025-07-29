@@ -1,0 +1,51 @@
+{
+  "cache_time": 1753728857.241288,
+  "file_timestamps": {
+    "README.md": 1747422761.2409465,
+    "package.json": 1747261845.3372214,
+    ".env": 1747261062.1837993,
+    "tsconfig.json": 1747245567.933091,
+    "src/index.ts": 1747367468.728565,
+    "src/utils/parseBenefits.ts": 1747424879.9244454,
+    "src/utils/findPayerName.ts": 1747425722.4695768,
+    "src/data/mock.ts": 1747350039.1933937,
+    "src/data/payers.ts": 1747425525.4837594,
+    "src/routes/eligibility.ts": 1747455251.683075,
+    "src/routes/findPayer.ts": 1747421352.3176954,
+    "src/interfaces/types.ts": 1747425624.9698524
+  },
+  "result": {
+    "directory": "/Users/usmanayobami/Documents/Digital Health/eli-benefit-api",
+    "files": [
+      ".env",
+      "README.md",
+      "package.json",
+      "src/data/mock.ts",
+      "src/data/payers.ts",
+      "src/index.ts",
+      "src/interfaces/types.ts",
+      "src/routes/eligibility.ts",
+      "src/routes/findPayer.ts",
+      "src/utils/findPayerName.ts",
+      "src/utils/parseBenefits.ts",
+      "tsconfig.json"
+    ],
+    "folders": [
+      "src",
+      "src/data",
+      "src/interfaces",
+      "src/routes",
+      "src/utils"
+    ],
+    "total_files": 12,
+    "total_folders": 5,
+    "ignored_count": 4,
+    "recursive": true,
+    "max_depth": null,
+    "cached": true,
+    "incremental": true,
+    "changed_files": 0,
+    "new_files": 0,
+    "deleted_files": 1
+  }
+}

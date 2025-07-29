@@ -1,0 +1,44 @@
+{
+  "cache_time": 1753766550.5948029,
+  "file_timestamps": {
+    "eli-benefit-api": 1753763681.0,
+    "rosemary": 1753762679.0,
+    "playground": 1752735872.0,
+    "OfferLettereca2386a7fb88b0784c2b5437bcb1b8dedc7acaa.pdf": 1746454202.0,
+    "payers.json": 1747421369.2043207,
+    "note.txt": 1748556498.3550565,
+    "basil": 1753750139.0,
+    "package.json": 1748059349.9304073,
+    "aws": 1749150006.0,
+    "Tramika A_private_charts.pdf": 1751397923.051417,
+    "eli-benefit-api-cloud": 1753058221.0
+  },
+  "result": {
+    "directory": "/Users/usmanayobami/Documents/Digital Health",
+    "files": [
+      "OfferLettereca2386a7fb88b0784c2b5437bcb1b8dedc7acaa.pdf",
+      "Tramika A_private_charts.pdf",
+      "note.txt",
+      "package.json",
+      "payers.json"
+    ],
+    "folders": [
+      "aws",
+      "basil",
+      "eli-benefit-api",
+      "eli-benefit-api-cloud",
+      "playground",
+      "rosemary"
+    ],
+    "total_files": 5,
+    "total_folders": 6,
+    "ignored_count": 3,
+    "recursive": false,
+    "max_depth": null,
+    "cached": true,
+    "incremental": true,
+    "changed_files": 1,
+    "new_files": 0,
+    "deleted_files": 0
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "cache_time": 1753763288.535365,
+  "file_timestamps": {
+    "README.md": 1747422761.2409465,
+    "package.json": 1747261845.3372214,
+    ".env": 1747261062.1837993,
+    "tsconfig.json": 1747245567.933091,
+    "src/index.ts": 1747367468.728565
+  },
+  "result": {
+    "directory": "/Users/usmanayobami/Documents/Digital Health/eli-benefit-api",
+    "files": [
+      "README.md",
+      "package.json",
+      ".env",
+      "tsconfig.json",
+      "src/index.ts"
+    ],
+    "folders": [
+      "src",
+      "src/utils",
+      "src/data",
+      "src/routes",
+      "src/interfaces"
+    ],
+    "total_files": 5,
+    "total_folders": 5,
+    "ignored_count": 4,
+    "recursive": true,
+    "max_depth": 2,
+    "cached": false
+  }
+}
