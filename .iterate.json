@@ -1,0 +1,62 @@
+{
+  "scan": {
+    "recursive": true,
+    "max_depth": -1,
+    "follow_symlinks": false,
+    "max_file_size": 10485760
+  },
+  "ignore": {
+    "patterns": [
+      ".git",
+      ".svn",
+      ".hg",
+      ".bzr",
+      "node_modules",
+      "__pycache__",
+      ".pytest_cache",
+      "*.pyc",
+      "*.pyo",
+      "*.pyd",
+      "*.so",
+      ".DS_Store",
+      "Thumbs.db",
+      "*.log",
+      ".iterate_cache",
+      "*.cache"
+    ],
+    "files": [
+      ".gitignore",
+      ".iterateignore"
+    ]
+  },
+  "file_types": {
+    "enabled_languages": [
+      "python",
+      "javascript",
+      "typescript",
+      "jsx",
+      "tsx"
+    ],
+    "include_config_files": true,
+    "include_test_files": false,
+    "include_documentation": false
+  },
+  "cache": {
+    "enabled": true,
+    "directory": ".iterate_cache",
+    "max_age": 3600,
+    "incremental_updates": true
+  },
+  "progress": {
+    "type": "simple",
+    "update_interval": 0.5,
+    "show_eta": true
+  },
+  "output": {
+    "format": "text",
+    "show_errors": true,
+    "show_stats": true,
+    "max_files_display": 50,
+    "max_dirs_display": 20
+  }
+}

@@ -1,0 +1,7 @@
+# Core dependencies
+watchdog>=3.0.0
+PyYAML>=6.0
+
+# Optional dependencies for enhanced functionality
+# colorama>=0.4.6  # For colored output (optional)
+# tqdm>=4.65.0     # For progress bars (optional)
