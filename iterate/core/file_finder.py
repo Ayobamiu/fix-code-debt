@@ -25,7 +25,7 @@ class FileFinder:
         self.error_handler = error_handler or ErrorHandler()
         self.progress_reporter = progress_reporter or ProgressReporter()
         self.cache_manager = cache_manager or CacheManager(".iterate_cache", self.error_handler)
-        self.ignore_patterns = ignore_patterns or IgnorePatterns(self.error_handler)
+        self.ignore_patterns = ignore_patterns or IgnorePatterns(error_handler=self.error_handler)
         self.file_type_detector = FileTypeDetector(self.error_handler)
         self.config_manager = config_manager or ConfigManager(self.error_handler)
     

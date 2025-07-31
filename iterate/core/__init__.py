@@ -9,6 +9,7 @@ from .error_handler import ErrorHandler, ErrorSeverity
 from .progress_reporter import ProgressReporter, ProgressType
 from .file_types import FileTypeDetector, FileCategory, Language
 from .config_manager import ConfigManager
+from .dependency_mapper import DependencyMapper, Dependency, FileDependencies, DependencyType
 
 __all__ = [
     'FileFinder',
@@ -21,5 +22,9 @@ __all__ = [
     'FileTypeDetector',
     'FileCategory',
     'Language',
-    'ConfigManager'
+    'ConfigManager',
+    'DependencyMapper',
+    'Dependency',
+    'FileDependencies',
+    'DependencyType'
 ]
