@@ -20,7 +20,7 @@ class ConfigManager:
         self.default_config = {
             "scan": {
                 "recursive": True,
-                "max_depth": -1,
+                "max_depth": 10,
                 "follow_symlinks": False,
                 "max_file_size": 10 * 1024 * 1024,  # 10MB
             },

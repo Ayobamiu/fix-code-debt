@@ -3,6 +3,15 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Python cache files (more comprehensive)
+*.pyc
+*.pyo
+*.pyd
+.Python
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+
 # C extensions
 *.so
 
@@ -168,6 +177,13 @@ cython_debug/
 .iterate_cache/
 *.cache
 cache/
+
+# Project-specific cache and temporary files
+.iterate_cache/
+*.cache
+cache/
+temp/
+tmp/
 
 # OS-specific files
 .DS_Store
