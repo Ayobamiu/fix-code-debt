@@ -63,6 +63,11 @@ Examples:
     parser.add_argument("--hide-errors", action="store_true", dest="hide_errors",
                        help="Hide error information")
     
+    # Dependency analysis
+    parser.add_argument("--analyze-deps", action="store_true", help="Analyze dependencies")
+    parser.add_argument("--export-deps", help="Export dependencies to file")
+    parser.add_argument("--impact", help="Show impact analysis for a specific file")
+    
     # Verbosity
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     parser.add_argument("-q", "--quiet", action="store_true", help="Quiet output")
@@ -142,6 +147,52 @@ Examples:
         elif args.monitor:
             # Monitoring mode
             monitor_directory(args.directory, args.duration)
+        elif args.analyze_deps or args.export_deps or args.impact:
+            # Dependency analysis mode
+            from .core.error_handler import ErrorHandler
+            from .core.progress_reporter import ProgressReporter
+            from .utils.dependency_analyzer import DependencyAnalyzer
+            
+            error_handler = ErrorHandler()
+            progress_reporter = ProgressReporter(progress_type)
+            
+            analyzer = DependencyAnalyzer(
+                directory=args.directory,
+                error_handler=error_handler,
+                progress_reporter=progress_reporter
+            )
+            
+            if args.analyze_deps:
+                print(f"🔍 Analyzing dependencies in: {args.directory}")
+                
+                # First, do a file discovery scan to show accurate counts
+                file_finder = analyzer.file_finder
+                discovery_result = file_finder.find_files_and_folders(
+                    args.directory, 
+                    max_depth=args.max_depth
+                )
+                total_files_found = len(discovery_result.get('files', []))
+                total_dirs_found = len(discovery_result.get('folders', []))
+                
+                print(f"📁 File Discovery: {total_files_found} files, {total_dirs_found} directories")
+                
+                # Now do dependency analysis
+                dependencies, all_files = analyzer.analyze_codebase()
+                analyzer.print_analysis_summary(dependencies, all_files)
+                
+                if args.export_deps:
+                    analyzer.export_analysis(dependencies, args.export_deps)
+                    
+            elif args.impact:
+                print(f"🎯 Impact analysis for: {args.impact}")
+                impacted_files = analyzer.get_impact_analysis(args.impact)
+                if impacted_files:
+                    print(f"Files that would be impacted:")
+                    for file_path in impacted_files:
+                        print(f"  - {file_path}")
+                else:
+                    print("No files would be impacted by changes to this file.")
+                    
         else:
             # Scan mode
             print_directory_contents(
