@@ -17,6 +17,10 @@ from .core.dependency_mapper import DependencyMapper, Dependency, FileDependenci
 # Utility components
 from .utils.dependency_analyzer import DependencyAnalyzer
 
+# Integration components
+from .integrations.github_client import GitHubClient
+from .integrations.repository_analyzer import RepositoryAnalyzer, RepositoryAnalysis
+
 __all__ = [
     "FileFinder",
     "CacheManager", 
@@ -27,5 +31,8 @@ __all__ = [
     "DependencyMapper",
     "Dependency",
     "FileDependencies",
-    "DependencyAnalyzer"
+    "DependencyAnalyzer",
+    "GitHubClient",
+    "RepositoryAnalyzer",
+    "RepositoryAnalysis"
 ]
