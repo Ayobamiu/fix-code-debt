@@ -8,6 +8,7 @@ from typing import List
 from .core.progress_reporter import ProgressType
 from .utils.display import print_directory_contents
 from .utils.monitoring import monitor_directory
+from .integrations.repository_analyzer import RepositoryAnalyzer
 
 
 def main():
@@ -67,6 +68,13 @@ Examples:
     parser.add_argument("--analyze-deps", action="store_true", help="Analyze dependencies")
     parser.add_argument("--export-deps", help="Export dependencies to file")
     parser.add_argument("--impact", help="Show impact analysis for a specific file")
+    
+    # GitHub integration
+    parser.add_argument("--github", action="store_true", help="Enable GitHub integration")
+    parser.add_argument("--github-auth", action="store_true", help="Authenticate with GitHub")
+    parser.add_argument("--github-oauth", action="store_true", help="Authenticate with GitHub using OAuth")
+    parser.add_argument("--github-issues", action="store_true", help="Create GitHub issues for debt findings")
+    parser.add_argument("--github-analysis", action="store_true", help="Perform full GitHub repository analysis")
     
     # Verbosity
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
@@ -192,6 +200,75 @@ Examples:
                         print(f"  - {file_path}")
                 else:
                     print("No files would be impacted by changes to this file.")
+        
+        # GitHub integration
+        elif args.github_auth:
+            print("🔐 Setting up GitHub authentication...")
+            from .integrations.github_client import GitHubClient
+            
+            github_client = GitHubClient()
+            if github_client.authenticate():
+                print("✅ GitHub authentication successful!")
+            else:
+                print("❌ GitHub authentication failed.")
+                sys.exit(1)
+        
+        elif args.github_oauth:
+            print("🔐 Setting up GitHub OAuth authentication...")
+            from .integrations.simple_oauth import SimpleGitHubOAuthClient
+            
+            oauth_client = SimpleGitHubOAuthClient()
+            if oauth_client.authenticate():
+                print("✅ GitHub OAuth authentication successful!")
+            else:
+                print("❌ GitHub OAuth authentication failed.")
+                sys.exit(1)
+        
+        elif args.github_analysis:
+            print("🔍 Starting GitHub repository analysis...")
+            from .core.error_handler import ErrorHandler
+            
+            error_handler = ErrorHandler()
+            analyzer = RepositoryAnalyzer(error_handler=error_handler)
+            
+            analysis = analyzer.analyze_repository(args.directory)
+            analyzer.print_analysis_summary(analysis)
+            
+            if args.github_issues and analysis.debt_score > 0.6:
+                print("\n📝 Creating GitHub issues for debt findings...")
+                issues_created = analyzer.create_debt_issues(analysis)
+                if issues_created:
+                    print(f"✅ Created {len(issues_created)} GitHub issues")
+                else:
+                    print("⚠️  No issues created (debt score too low or authentication failed)")
+        
+        elif args.github_issues:
+            print("📝 Creating GitHub issues for debt findings...")
+            from .core.error_handler import ErrorHandler
+            from .core.progress_reporter import ProgressReporter
+            from .utils.dependency_analyzer import DependencyAnalyzer
+            
+            error_handler = ErrorHandler()
+            progress_reporter = ProgressReporter(progress_type)
+            
+            analyzer = DependencyAnalyzer(
+                directory=args.directory,
+                error_handler=error_handler,
+                progress_reporter=progress_reporter
+            )
+            
+            dependencies, all_files = analyzer.analyze_codebase()
+            
+            # Create repository analyzer for GitHub integration
+            repo_analyzer = RepositoryAnalyzer(error_handler=error_handler)
+            analysis = repo_analyzer._analyze_local_only(args.directory)
+            analysis.dependencies = dependencies
+            
+            issues_created = repo_analyzer.create_debt_issues(analysis)
+            if issues_created:
+                print(f"✅ Created {len(issues_created)} GitHub issues")
+            else:
+                print("⚠️  No issues created (debt score too low or authentication failed)")
                     
         else:
             # Scan mode
