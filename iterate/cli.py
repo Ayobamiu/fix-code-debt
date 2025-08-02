@@ -68,6 +68,13 @@ Examples:
     parser.add_argument("--export-deps", help="Export dependencies to file")
     parser.add_argument("--impact", help="Show impact analysis for a specific file")
     
+    # GitHub MCP integration
+    parser.add_argument("--github", action="store_true", help="Enable GitHub MCP integration")
+    parser.add_argument("--github-mcp", action="store_true", help="Use GitHub MCP for enhanced analysis")
+    parser.add_argument("--github-issues", action="store_true", help="Create GitHub issues for debt findings")
+    parser.add_argument("--github-analysis", action="store_true", help="Perform full GitHub repository analysis")
+    parser.add_argument("--github-pr-comments", action="store_true", help="Comment on high debt pull requests")
+    
     # Verbosity
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     parser.add_argument("-q", "--quiet", action="store_true", help="Quiet output")
@@ -192,6 +199,34 @@ Examples:
                         print(f"  - {file_path}")
                 else:
                     print("No files would be impacted by changes to this file.")
+        
+        # GitHub MCP integration
+        elif args.github_analysis or args.github_issues or args.github_pr_comments:
+            print("🔍 Starting GitHub MCP repository analysis...")
+            from .core.error_handler import ErrorHandler
+            from .integrations.mcp_repository_analyzer import MCPRepositoryAnalyzer
+            
+            error_handler = ErrorHandler()
+            analyzer = MCPRepositoryAnalyzer(error_handler=error_handler)
+            
+            analysis = analyzer.analyze_repository(args.directory)
+            analyzer.print_analysis_summary(analysis)
+            
+            if args.github_issues and analysis.debt_score > 0.5:
+                print("\n📝 Creating GitHub issues for debt findings...")
+                issues_created = analyzer.create_debt_issues(analysis)
+                if issues_created:
+                    print(f"✅ Created {len(issues_created)} GitHub issues")
+                else:
+                    print("⚠️  No issues created (debt score too low or authentication failed)")
+            
+            if args.github_pr_comments:
+                print("\n💬 Commenting on high debt pull requests...")
+                commented_count = analyzer.comment_on_high_debt_prs(analysis)
+                if commented_count > 0:
+                    print(f"✅ Commented on {commented_count} pull requests")
+                else:
+                    print("ℹ️  No high debt pull requests found")
                     
         else:
             # Scan mode
