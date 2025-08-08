@@ -1,6 +1,16 @@
 # Core dependencies
 watchdog>=3.0.0
 PyYAML>=6.0
+psutil>=5.8.0
+requests
+
+# AI dependencies
+openai>=1.0.0
+
+# RAG dependencies
+sentence-transformers>=2.2.0
+chromadb>=0.5.0
+numpy>=1.21.0
 
 # Optional dependencies for enhanced functionality
 # colorama>=0.4.6  # For colored output (optional)

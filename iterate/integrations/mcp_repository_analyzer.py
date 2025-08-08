@@ -11,6 +11,8 @@ from .mcp_client import GitHubMCPClient, GitHubRepository, GitHubIssue
 from ..utils.dependency_analyzer import DependencyAnalyzer
 from ..core.error_handler import ErrorHandler
 from ..core.progress_reporter import ProgressReporter
+from ..core.advanced_metrics import AdvancedCodeAnalyzer
+from ..core.code_generator import CodeGenerator
 
 
 @dataclass
@@ -28,6 +30,8 @@ class MCPRepositoryAnalysis:
     recommendations: List[str]
     pr_debt_analysis: List[Dict[str, Any]]
     team_insights: Dict[str, Any]
+    refactoring_suggestions: List[Dict[str, Any]]
+    quality_report: Dict[str, Any]
 
 
 class MCPRepositoryAnalyzer:
@@ -41,6 +45,8 @@ class MCPRepositoryAnalyzer:
             error_handler=self.error_handler,
             progress_reporter=ProgressReporter()
         )
+        self.advanced_analyzer = AdvancedCodeAnalyzer()
+        self.code_generator = CodeGenerator()
     
     def analyze_repository(self, directory: str = ".") -> MCPRepositoryAnalysis:
         """Perform comprehensive repository analysis using MCP."""
@@ -68,6 +74,14 @@ class MCPRepositoryAnalyzer:
         print("🔗 Analyzing code dependencies...")
         dependencies, all_files = self.dependency_analyzer.analyze_codebase()
         
+        # Perform advanced quality analysis
+        print("📊 Analyzing code quality metrics...")
+        quality_report = self.advanced_analyzer.generate_quality_report(all_files)
+        
+        # Generate refactoring suggestions
+        print("🤖 Generating AI-powered refactoring suggestions...")
+        refactoring_suggestions = self._generate_refactoring_suggestions(all_files, quality_report)
+        
         # Get file breakdown
         file_breakdown = self._get_file_breakdown(all_files)
         
@@ -90,7 +104,7 @@ class MCPRepositoryAnalyzer:
         debt_score = self._calculate_debt_score(dependencies, file_breakdown)
         
         # Generate recommendations
-        recommendations = self._generate_recommendations(dependencies, debt_score)
+        recommendations = self._generate_recommendations(dependencies, debt_score, quality_report)
         
         # Analyze PR debt
         pr_debt_analysis = self._analyze_pr_debt(pull_requests, dependencies)
@@ -110,7 +124,9 @@ class MCPRepositoryAnalyzer:
             debt_score=debt_score,
             recommendations=recommendations,
             pr_debt_analysis=pr_debt_analysis,
-            team_insights=team_insights
+            team_insights=team_insights,
+            refactoring_suggestions=refactoring_suggestions,
+            quality_report=quality_report
         )
     
     def _analyze_local_only(self, directory: str) -> MCPRepositoryAnalysis:
@@ -119,6 +135,9 @@ class MCPRepositoryAnalyzer:
         file_breakdown = self._get_file_breakdown(all_files)
         debt_score = self._calculate_debt_score(dependencies, file_breakdown)
         recommendations = self._generate_recommendations(dependencies, debt_score)
+        
+        # Generate refactoring suggestions for local analysis
+        refactoring_suggestions = self._generate_refactoring_suggestions(all_files, quality_report)
         
         return MCPRepositoryAnalysis(
             repository=None,
@@ -132,7 +151,9 @@ class MCPRepositoryAnalyzer:
             debt_score=debt_score,
             recommendations=recommendations,
             pr_debt_analysis=[],
-            team_insights={}
+            team_insights={},
+            refactoring_suggestions=refactoring_suggestions,
+            quality_report=quality_report
         )
     
     def _get_file_breakdown(self, files: List[str]) -> Dict[str, int]:
@@ -173,7 +194,7 @@ class MCPRepositoryAnalyzer:
         
         return min(debt_score, 1.0)
     
-    def _generate_recommendations(self, dependencies: Dict[str, Any], debt_score: float) -> List[str]:
+    def _generate_recommendations(self, dependencies: Dict[str, Any], debt_score: float, quality_report: Dict[str, Any]) -> List[str]:
         """Generate recommendations based on analysis."""
         recommendations = []
         
@@ -201,6 +222,10 @@ class MCPRepositoryAnalyzer:
         
         if no_dep_files:
             recommendations.append(f"🧹 {len(no_dep_files)} files have no dependencies. Check for dead code.")
+        
+        # Add quality-based recommendations
+        if quality_report.get('recommendations'):
+            recommendations.extend(quality_report['recommendations'])
         
         return recommendations
     
@@ -239,6 +264,41 @@ class MCPRepositoryAnalyzer:
         
         return insights
     
+    def _generate_refactoring_suggestions(self, files: List[str], quality_report: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Generate AI-powered refactoring suggestions for files with high complexity."""
+        suggestions = []
+        
+        # Get files with high complexity
+        high_complexity_files = []
+        for file_path, metrics in quality_report.get('complexity_metrics', {}).items():
+            if hasattr(metrics, 'cyclomatic_complexity') and metrics.cyclomatic_complexity > 10:
+                high_complexity_files.append(file_path)
+        
+        # Generate suggestions for high complexity files
+        for file_path in high_complexity_files[:5]:  # Limit to top 5 files
+            try:
+                file_suggestions = self.code_generator.analyze_file_for_refactoring(
+                    file_path, 
+                    quality_report.get('complexity_metrics', {}).get(file_path, {})
+                )
+                
+                for suggestion in file_suggestions:
+                    suggestions.append({
+                        'file_path': suggestion.file_path,
+                        'line_number': suggestion.line_number,
+                        'type': suggestion.suggestion_type,
+                        'description': suggestion.description,
+                        'complexity_reduction': suggestion.complexity_reduction,
+                        'confidence': suggestion.confidence,
+                        'original_code': suggestion.original_code[:200] + "..." if len(suggestion.original_code) > 200 else suggestion.original_code,
+                        'suggested_code': suggestion.suggested_code[:200] + "..." if len(suggestion.suggested_code) > 200 else suggestion.suggested_code
+                    })
+                    
+            except Exception as e:
+                print(f"⚠️  Error generating suggestions for {file_path}: {e}")
+        
+        return suggestions
+    
     def print_analysis_summary(self, analysis: MCPRepositoryAnalysis):
         """Print comprehensive analysis summary."""
         print("\n" + "="*60)
@@ -273,6 +333,15 @@ class MCPRepositoryAnalyzer:
         
         print(f"\n💰 Debt Score: {analysis.debt_score:.1%}")
         
+        # Add advanced quality metrics
+        if hasattr(analysis, 'quality_report'):
+            quality = analysis.quality_report.get('quality_scores', {})
+            if hasattr(quality, 'overall_score'):
+                print(f"📊 Quality Score: {quality.overall_score:.1%}")
+                print(f"   Complexity: {quality.complexity_score:.1%}")
+                print(f"   Duplication: {quality.duplication_score:.1%}")
+                print(f"   Documentation: {quality.documentation_score:.1%}")
+        
         print(f"\n💡 Recommendations:")
         for rec in analysis.recommendations:
             print(f"   {rec}")
@@ -292,6 +361,14 @@ class MCPRepositoryAnalyzer:
                 print(f"   High debt PRs: {len(high_debt_prs)}")
                 for pr in high_debt_prs[:3]:  # Show top 3
                     print(f"     PR #{pr['number']}: {pr['title']} (Debt: {pr['debt_score']:.1%})")
+        
+        # Show AI refactoring suggestions
+        if hasattr(analysis, 'refactoring_suggestions') and analysis.refactoring_suggestions:
+            print(f"\n🤖 AI Refactoring Suggestions:")
+            print(f"   Found {len(analysis.refactoring_suggestions)} suggestions")
+            for i, suggestion in enumerate(analysis.refactoring_suggestions[:3], 1):  # Show top 3
+                print(f"   {i}. {suggestion['file_path']}: {suggestion['description']}")
+                print(f"      Confidence: {suggestion['confidence']:.1%}, Complexity Reduction: {suggestion['complexity_reduction']:.1f}")
         
         print("="*60)
     
