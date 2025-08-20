@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 from .ignore_patterns import IgnorePatterns
-from .cache_manager import CacheManager
+from .cache_manager import SmartCacheManager
 from .error_handler import ErrorHandler, ErrorSeverity
 from .progress_reporter import ProgressReporter, ProgressType
 from .file_types import FileTypeDetector, FileCategory, Language
@@ -19,12 +19,12 @@ class FileFinder:
     
     def __init__(self, error_handler: Optional[ErrorHandler] = None, 
                  progress_reporter: Optional[ProgressReporter] = None,
-                 cache_manager: Optional[CacheManager] = None,
+                 cache_manager: Optional[SmartCacheManager] = None,
                  ignore_patterns: Optional[IgnorePatterns] = None,
                  config_manager: Optional[ConfigManager] = None):
         self.error_handler = error_handler or ErrorHandler()
         self.progress_reporter = progress_reporter or ProgressReporter()
-        self.cache_manager = cache_manager or CacheManager(".iterate_cache", self.error_handler)
+        self.cache_manager = cache_manager or SmartCacheManager(".iterate_cache")
         self.ignore_patterns = ignore_patterns or IgnorePatterns(error_handler=self.error_handler)
         self.file_type_detector = FileTypeDetector(self.error_handler)
         self.config_manager = config_manager or ConfigManager(self.error_handler)
@@ -80,8 +80,9 @@ class FileFinder:
         
         ignore_handler = IgnorePatterns(project_ignore_patterns, self.error_handler)
         
-        # Check cache first
-        if self.cache_manager and cache_config.get("enabled", True):
+        # Check cache first (temporarily disabled for SmartCacheManager compatibility)
+        # TODO: Implement file discovery caching in SmartCacheManager
+        if False and self.cache_manager and cache_config.get("enabled", True):
             cached_result = self.cache_manager.get(str(directory_path), scan_config["recursive"], 
                                                  scan_config["max_depth"], project_ignore_patterns)
             if cached_result:
@@ -114,8 +115,9 @@ class FileFinder:
                 "config_used": project_config
             }
             
-            # Cache the result
-            if self.cache_manager and cache_config.get("enabled", True):
+            # Cache the result (temporarily disabled for SmartCacheManager compatibility)
+            # TODO: Implement file discovery caching in SmartCacheManager
+            if False and self.cache_manager and cache_config.get("enabled", True):
                 self.cache_manager.set(str(directory_path), scan_config["recursive"], 
                                      scan_config["max_depth"], project_ignore_patterns, result)
             

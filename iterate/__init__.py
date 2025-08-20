@@ -7,19 +7,20 @@ __author__ = "Iterate Team"
 
 # Core components
 from .core.file_finder import FileFinder
-from .core.cache_manager import CacheManager
+from .core.cache_manager import SmartCacheManager
 from .core.error_handler import ErrorHandler
 from .core.progress_reporter import ProgressReporter
 from .core.file_types import FileTypeDetector
 from .core.config_manager import ConfigManager
 from .core.dependency_mapper import DependencyMapper, Dependency, FileDependencies
+from .core.duplicate_pr_manager import DuplicatePRManager, DuplicateGroup, PRTemplate
 
 # Utility components
 from .utils.dependency_analyzer import DependencyAnalyzer
 
 __all__ = [
     "FileFinder",
-    "CacheManager", 
+    "SmartCacheManager", 
     "ErrorHandler",
     "ProgressReporter",
     "FileTypeDetector",
@@ -27,5 +28,8 @@ __all__ = [
     "DependencyMapper",
     "Dependency",
     "FileDependencies",
+    "DuplicatePRManager",
+    "DuplicateGroup",
+    "PRTemplate",
     "DependencyAnalyzer"
 ]

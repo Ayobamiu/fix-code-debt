@@ -21,6 +21,7 @@ from .error_handler import ErrorHandler
 from .file_finder import FileFinder
 from .dependency_mapper import DependencyMapper
 from .progress_reporter import ProgressReporter
+from .cache_manager import SmartCacheManager
 
 
 @dataclass
@@ -61,6 +62,7 @@ class CodebaseIntelligence:
         self.dependency_mapper = None
         self.directory = None
         self.chunks = []
+        self.cache_manager = None
         
     def initialize(self, directory: str) -> bool:
         """Initialize the codebase intelligence system."""
@@ -72,6 +74,9 @@ class CodebaseIntelligence:
             progress_reporter = ProgressReporter()
             self.file_finder = FileFinder(error_handler=self.error_handler, progress_reporter=progress_reporter)
             self.dependency_mapper = DependencyMapper(error_handler=self.error_handler, progress_reporter=progress_reporter)
+            
+            # Initialize smart cache manager
+            self.cache_manager = SmartCacheManager()
             
             # Load embedding model
             print("📊 Loading embedding model...")
@@ -113,7 +118,7 @@ class CodebaseIntelligence:
                 self.directory, 
                 max_depth=10
             )
-            
+
             if not files or 'files' not in files:
                 print("⚠️  No code files found")
                 return False
@@ -128,11 +133,37 @@ class CodebaseIntelligence:
             
             print(f"📁 Found {len(code_files)} code files")
             
-            # Process each file
-            for file_path in code_files:
-                self._process_file(file_path)
+            # Use smart caching to determine what to process
+            # TEMPORARILY: Force process all files to bypass cache issues
+            force_process = True  # Set to False to re-enable caching
             
-            print(f"✅ Processed {len(self.chunks)} code chunks")
+            if force_process:
+                files_to_process = code_files
+                files_to_skip = []
+                print("🔄 Force processing all files (cache bypassed)")
+            else:
+                files_to_process, files_to_skip = self.cache_manager.get_files_to_process(
+                    self.directory, code_files
+                )
+            
+            # Process only changed files
+            total_chunks = 0
+            for file_path in files_to_process:
+                chunks = self._process_file(file_path)
+                if chunks:
+                    total_chunks += len(chunks)
+            
+            # Update cache for processed files
+            for file_path in files_to_process:
+                chunk_count = len([c for c in self.chunks if c.file_path == file_path])
+                if chunk_count > 0:
+                    self.cache_manager.update_file_cache(file_path, chunk_count)
+            
+            # Finalize cache
+            self.cache_manager.finalize_analysis(len(code_files), total_chunks)
+            
+            print(f"✅ Processed {len(files_to_process)} files, skipped {len(files_to_skip)} files")
+            print(f"📊 Generated {total_chunks} code chunks")
             return True
             
         except Exception as e:
@@ -153,7 +184,7 @@ class CodebaseIntelligence:
         ext = Path(file_path).suffix.lower()
         return ext in ['.py', '.js', '.jsx', '.ts', '.tsx']
     
-    def _process_file(self, file_path: str):
+    def _process_file(self, file_path: str) -> List[CodeChunk]:
         """Process a single file into chunks."""
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
@@ -166,13 +197,19 @@ class CodebaseIntelligence:
             elif ext in ['.js', '.jsx', '.ts', '.tsx']:
                 chunks = self._parse_js_ts_file(file_path, content)
             else:
-                return
+                return []
             
             # Store chunks in vector database
             self._store_chunks(chunks)
             
+            # Add to memory chunks
+            self.chunks.extend(chunks)
+            
+            return chunks
+            
         except Exception as e:
             self.error_handler.handle_error(e, {"operation": "process_file", "file_path": file_path})
+            return []
     
     def _parse_python_file(self, file_path: str, content: str) -> List[CodeChunk]:
         """Parse Python file into chunks."""
@@ -554,14 +591,19 @@ class CodebaseIntelligence:
     
     def get_codebase_summary(self) -> Dict[str, Any]:
         """Get a summary of the codebase."""
+        print(f"🔍 Debug: get_codebase_summary called, initialized={self.initialized}")
         if not self.initialized:
+            print("🔍 Debug: Not initialized, returning empty summary")
             return {"total_chunks": 0, "unique_files": 0, "functions": 0, "classes": 0, "imports": 0, "average_complexity": 0.0, "high_complexity_functions": 0}
         
         try:
             # Get all chunks
+            print(f"🔍 Debug: Attempting to get chunks from collection: {self.collection.name}")
             results = self.collection.get()
+            print(f"🔍 Debug: Collection.get() returned: {type(results)}, keys: {list(results.keys()) if isinstance(results, dict) else 'not a dict'}")
             
             if not results['ids']:
+                print("🔍 Debug: No IDs found in results")
                 return {"total_chunks": 0, "unique_files": 0, "functions": 0, "classes": 0, "imports": 0, "average_complexity": 0.0, "high_complexity_functions": 0}
             
             total_chunks = len(results['ids'])
@@ -575,6 +617,11 @@ class CodebaseIntelligence:
             average_complexity = sum(complexities) / len(complexities) if complexities else 0.0
             high_complexity_functions = len([c for c in complexities if c > 5])
             
+            # Add cache statistics
+            cache_stats = {}
+            if self.cache_manager:
+                cache_stats = self.cache_manager.get_cache_stats()
+            
             return {
                 "total_chunks": total_chunks,
                 "unique_files": unique_files,
@@ -582,9 +629,33 @@ class CodebaseIntelligence:
                 "classes": classes,
                 "imports": imports,
                 "average_complexity": round(average_complexity, 2),
-                "high_complexity_functions": high_complexity_functions
+                "high_complexity_functions": high_complexity_functions,
+                "cache_stats": cache_stats
             }
             
         except Exception as e:
             self.error_handler.handle_error(e, {"operation": "get_codebase_summary"})
             return {"total_chunks": 0, "unique_files": 0, "functions": 0, "classes": 0, "imports": 0, "average_complexity": 0.0, "high_complexity_functions": 0}
+    
+    def clear_cache(self):
+        """Clear all cache data."""
+        try:
+            if self.cache_manager:
+                self.cache_manager.clear_cache()
+            
+            # Clear ChromaDB collection
+            if self.collection:
+                try:
+                    self.collection.delete(where={})
+                except:
+                    pass
+            
+            # Reset chunks
+            self.chunks = []
+            
+            print("🗑️  Cache cleared successfully")
+            return True
+            
+        except Exception as e:
+            self.error_handler.handle_error(e, {"operation": "clear_cache"})
+            return False

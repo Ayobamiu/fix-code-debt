@@ -29,13 +29,13 @@ def print_directory_contents(directory_path: str, recursive: bool = True,
     # Create components
     from ..core.error_handler import ErrorHandler
     from ..core.progress_reporter import ProgressReporter
-    from ..core.cache_manager import CacheManager
+    from ..core.cache_manager import SmartCacheManager
     from ..core.ignore_patterns import IgnorePatterns
     from ..core.config_manager import ConfigManager
     
     error_handler = ErrorHandler()
     progress_reporter = ProgressReporter(progress_type=progress_type)
-    cache_manager = CacheManager(".iterate_cache", error_handler) if use_cache else None
+    cache_manager = SmartCacheManager(".iterate_cache") if use_cache else None
     ignore_handler = IgnorePatterns(ignore_patterns, error_handler)
     config_manager = ConfigManager(error_handler)
     

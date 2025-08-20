@@ -3,7 +3,7 @@ Core functionality for file discovery and analysis.
 """
 
 from .file_finder import FileFinder
-from .cache_manager import CacheManager
+from .cache_manager import SmartCacheManager
 from .ignore_patterns import IgnorePatterns
 from .error_handler import ErrorHandler, ErrorSeverity
 from .progress_reporter import ProgressReporter, ProgressType
@@ -13,7 +13,7 @@ from .dependency_mapper import DependencyMapper, Dependency, FileDependencies, D
 
 __all__ = [
     'FileFinder',
-    'CacheManager', 
+    'SmartCacheManager', 
     'IgnorePatterns',
     'ErrorHandler',
     'ErrorSeverity',

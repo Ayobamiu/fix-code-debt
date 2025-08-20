@@ -1,301 +1,343 @@
 """
-Cache management for file discovery results with incremental updates.
+Smart caching system for codebase intelligence.
+Implements Git-based change detection, file system monitoring, and intelligent caching.
 """
 
 import os
-import time
 import json
 import hashlib
+import time
+from typing import Dict, List, Set, Optional, Tuple
 from pathlib import Path
-from typing import List, Dict, Optional
-from .ignore_patterns import IgnorePatterns
-from .error_handler import ErrorHandler, ErrorSeverity
+from dataclasses import dataclass, asdict
+import subprocess
 
 
-class CacheManager:
-    """Manage caching for file discovery results with incremental updates."""
+@dataclass
+class FileCache:
+    """Cache information for a single file."""
+    file_path: str
+    last_modified: float
+    content_hash: str
+    chunk_count: int
+    dependencies: List[str]
+    last_analyzed: float
+
+
+@dataclass
+class CacheState:
+    """Overall cache state."""
+    last_git_commit: str
+    last_analysis_time: float
+    total_files: int
+    total_chunks: int
+    cache_version: str = "1.0"
+
+
+class SmartCacheManager:
+    """Manages intelligent caching for codebase analysis."""
     
-    def __init__(self, cache_dir: str = ".iterate_cache", error_handler: Optional[ErrorHandler] = None):
+    def __init__(self, cache_dir: str = ".iterate_cache"):
         self.cache_dir = Path(cache_dir)
-        self.error_handler = error_handler or ErrorHandler()
+        self.cache_dir.mkdir(exist_ok=True)
         
-        # Ensure cache directory exists
-        try:
-            self.cache_dir.mkdir(exist_ok=True)
-        except Exception as e:
-            self.error_handler.handle_error(
-                e, 
-                {"operation": "create_cache_dir", "path": str(cache_dir)}, 
-                ErrorSeverity.ERROR
-            )
-    
-    def _get_cache_key(self, directory: str, recursive: bool, max_depth: int, ignore_patterns: List[str]) -> str:
-        """Generate a unique cache key for the scan parameters."""
-        try:
-            key_data = {
-                "directory": directory,
-                "recursive": recursive,
-                "max_depth": max_depth,
-                "ignore_patterns": ignore_patterns or []
-            }
-            key_string = json.dumps(key_data, sort_keys=True)
-            return hashlib.md5(key_string.encode()).hexdigest()
-        except Exception as e:
-            self.error_handler.handle_error(
-                e, 
-                {"operation": "generate_cache_key", "directory": directory}, 
-                ErrorSeverity.ERROR
-            )
-            # Fallback to simple hash
-            return hashlib.md5(directory.encode()).hexdigest()
-    
-    def _get_cache_file(self, cache_key: str) -> Path:
-        """Get the cache file path for a given key."""
-        return self.cache_dir / f"{cache_key}.json"
-    
-    def _get_file_timestamps(self, directory: Path, recursive: bool, max_depth: int, ignore_handler: IgnorePatterns) -> Dict[str, float]:
-        """Get timestamps for all files in directory."""
-        timestamps = {}
+        # Cache files
+        self.files_cache_file = self.cache_dir / "files_cache.json"
+        self.state_cache_file = self.cache_dir / "cache_state.json"
         
-        def safe_stat(file_path: Path) -> Optional[float]:
-            """Safely get file modification time."""
+        # Load existing cache
+        self.files_cache: Dict[str, FileCache] = {}
+        self.cache_state: CacheState = self._load_cache_state()
+        
+        # Initialize caches
+        self._load_files_cache()
+    
+    def _load_cache_state(self) -> CacheState:
+        """Load the overall cache state."""
+        if self.state_cache_file.exists():
             try:
-                return file_path.stat().st_mtime
-            except (OSError, PermissionError) as e:
-                self.error_handler.handle_error(
-                    e, 
-                    {"operation": "get_file_timestamp", "path": str(file_path)}, 
-                    ErrorSeverity.WARNING
-                )
-                return None
+                with open(self.state_cache_file, 'r') as f:
+                    data = json.load(f)
+                    return CacheState(**data)
+            except:
+                pass
         
-        if recursive:
+        # Default state
+        return CacheState(
+            last_git_commit="",
+            last_analysis_time=0,
+            total_files=0,
+            total_chunks=0
+        )
+    
+    def _save_cache_state(self):
+        """Save the overall cache state."""
+        try:
+            with open(self.state_cache_file, 'w') as f:
+                json.dump(asdict(self.cache_state), f, indent=2)
+        except Exception as e:
+            print(f"⚠️  Warning: Could not save cache state: {e}")
+    
+    def _load_files_cache(self):
+        """Load the files cache."""
+        if self.files_cache_file.exists():
             try:
-                for root, dirs, filenames in os.walk(directory, followlinks=False):
-                    current_depth = len(Path(root).relative_to(directory).parts)
-                    if max_depth is not None and current_depth >= max_depth:
-                        continue
-                    
-                    # Filter directories
-                    if ignore_handler:
-                        dirs[:] = [d for d in dirs if not ignore_handler.should_ignore(str(Path(root) / d), is_dir=True)]
-                    
-                    for filename in filenames:
-                        file_path = Path(root) / filename
-                        relative_path = str(file_path.relative_to(directory))
-                        
-                        if ignore_handler and ignore_handler.should_ignore(relative_path):
-                            continue
-                        
-                        mtime = safe_stat(file_path)
-                        if mtime is not None:
-                            timestamps[relative_path] = mtime
-                            
-            except Exception as e:
-                self.error_handler.handle_error(
-                    e, 
-                    {"operation": "recursive_timestamp_scan", "directory": str(directory)}, 
-                    ErrorSeverity.ERROR
-                )
+                with open(self.files_cache_file, 'r') as f:
+                    data = json.load(f)
+                    self.files_cache = {
+                        path: FileCache(**file_data) 
+                        for path, file_data in data.items()
+                    }
+            except:
+                self.files_cache = {}
         else:
-            try:
-                with os.scandir(directory) as entries:
-                    for entry in entries:
-                        if ignore_handler and ignore_handler.should_ignore(entry.name):
-                            continue
-                        
-                        mtime = safe_stat(Path(entry.path))
-                        if mtime is not None:
-                            timestamps[entry.name] = mtime
-                            
-            except Exception as e:
-                self.error_handler.handle_error(
-                    e, 
-                    {"operation": "non_recursive_timestamp_scan", "directory": str(directory)}, 
-                    ErrorSeverity.ERROR
-                )
+            self.files_cache = {}
+    
+    def _save_files_cache(self):
+        """Save the files cache."""
+        try:
+            with open(self.files_cache_file, 'w') as f:
+                data = {
+                    path: asdict(file_cache) 
+                    for path, file_cache in self.files_cache.items()
+                }
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            print(f"⚠️  Warning: Could not save files cache: {e}")
+    
+    def _get_git_commit_hash(self, directory: str) -> Optional[str]:
+        """Get the current Git commit hash."""
+        try:
+            result = subprocess.run(
+                ['git', 'rev-parse', 'HEAD'],
+                cwd=directory,
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                return result.stdout.strip()
+        except:
+            pass
+        return None
+    
+    def _get_git_changed_files(self, directory: str, since_commit: str) -> List[str]:
+        """Get files changed since a specific commit."""
+        try:
+            result = subprocess.run(
+                ['git', 'diff', '--name-only', since_commit],
+                cwd=directory,
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode == 0:
+                return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        except:
+            pass
+        return []
+    
+    def _calculate_file_hash(self, file_path: str) -> str:
+        """Calculate SHA256 hash of file content."""
+        try:
+            with open(file_path, 'rb') as f:
+                return hashlib.sha256(f.read()).hexdigest()
+        except:
+            return ""
+    
+    def _get_file_dependencies(self, file_path: str) -> List[str]:
+        """Get file dependencies (simplified - can be enhanced later)."""
+        # For now, return empty list - can be enhanced with actual dependency analysis
+        return []
+    
+    def get_files_to_process(self, directory: str, all_files: List[str]) -> Tuple[List[str], List[str]]:
+        """
+        Get files that need processing and files that can be skipped.
+        Returns: (files_to_process, files_to_skip)
+        """
+        print("🔍 Checking cache for changes...")
         
-        return timestamps
-    
-    def get(self, directory: str, recursive: bool, max_depth: int, ignore_patterns: List[str]) -> Optional[Dict]:
-        """Get cached result with incremental updates."""
-        try:
-            cache_key = self._get_cache_key(directory, recursive, max_depth, ignore_patterns)
-            cache_file = self._get_cache_file(cache_key)
-            
-            if not cache_file.exists():
-                return None
-            
-            # Load cached data
-            try:
-                with open(cache_file, 'r') as f:
-                    cached_data = json.load(f)
-            except (json.JSONDecodeError, IOError) as e:
-                self.error_handler.handle_error(
-                    e, 
-                    {"operation": "load_cache", "cache_file": str(cache_file)}, 
-                    ErrorSeverity.WARNING
-                )
-                return None
-            
-            directory_path = Path(directory)
-            if not directory_path.exists():
-                return None
-            
-            # Initialize ignore handler
-            ignore_handler = IgnorePatterns(ignore_patterns, self.error_handler) if ignore_patterns is not None else None
-            
-            # Get current file timestamps
-            current_timestamps = self._get_file_timestamps(directory_path, recursive, max_depth, ignore_handler)
-            cached_timestamps = cached_data.get("file_timestamps", {})
-            
-            # Check for changes
-            changed_files = []
-            new_files = []
-            deleted_files = []
-            
-            # Find changed/new files
-            for file_path, current_mtime in current_timestamps.items():
-                cached_mtime = cached_timestamps.get(file_path)
-                if cached_mtime is None:
-                    new_files.append(file_path)
-                elif current_mtime > cached_mtime:
-                    changed_files.append(file_path)
-            
-            # Find deleted files
-            for file_path in cached_timestamps:
-                if file_path not in current_timestamps:
-                    deleted_files.append(file_path)
-            
-            # If no changes, return cached result
-            if not changed_files and not new_files and not deleted_files:
-                result = cached_data.get("result", {})
-                result["cached"] = True
-                result["incremental"] = False
-                result["directory"] = directory  # Ensure directory is included
-                return result
-            
-            # Perform incremental update
-            result = cached_data.get("result", {}).copy()
-            files = set(result.get("files", []))
-            folders = set(result.get("folders", []))
-            
-            # Remove deleted files
-            for file_path in deleted_files:
-                files.discard(file_path)
-            
-            # Add new files
-            for file_path in new_files:
-                files.add(file_path)
-                # Add parent folders
-                parent = Path(file_path).parent
-                while str(parent) != ".":
-                    folders.add(str(parent))
-                    parent = parent.parent
-            
-            # Update result
-            result.update({
-                "files": sorted(list(files)),
-                "folders": sorted(list(folders)),
-                "total_files": len(files),
-                "total_folders": len(folders),
-                "cached": True,
-                "incremental": True,
-                "changed_files": len(changed_files),
-                "new_files": len(new_files),
-                "deleted_files": len(deleted_files),
-                "directory": directory  # Ensure directory is included
-            })
-            
-            # Update cache with new timestamps
-            self._update_cache(directory, recursive, max_depth, ignore_patterns, result, current_timestamps)
-            
-            return result
-            
-        except Exception as e:
-            self.error_handler.handle_error(
-                e, 
-                {"operation": "cache_get", "directory": directory}, 
-                ErrorSeverity.ERROR
-            )
-            return None
-    
-    def _update_cache(self, directory: str, recursive: bool, max_depth: int, ignore_patterns: List[str], result: Dict, timestamps: Dict[str, float]):
-        """Update cache without recursion."""
-        try:
-            cache_key = self._get_cache_key(directory, recursive, max_depth, ignore_patterns)
-            cache_file = self._get_cache_file(cache_key)
-            
-            cache_data = {
-                "cache_time": time.time(),
-                "file_timestamps": timestamps,
-                "result": result
-            }
-            
-            with open(cache_file, 'w') as f:
-                json.dump(cache_data, f, indent=2)
-                
-        except Exception as e:
-            self.error_handler.handle_error(
-                e, 
-                {"operation": "update_cache", "directory": directory}, 
-                ErrorSeverity.WARNING
-            )
-    
-    def set(self, directory: str, recursive: bool, max_depth: int, ignore_patterns: List[str], result: Dict, timestamps: Optional[Dict[str, float]] = None):
-        """Cache the scan result with file timestamps."""
-        try:
-            # Get timestamps if not provided
-            if timestamps is None:
-                directory_path = Path(directory)
-                ignore_handler = IgnorePatterns(ignore_patterns, self.error_handler) if ignore_patterns is not None else None
-                timestamps = self._get_file_timestamps(directory_path, recursive, max_depth, ignore_handler)
-            
-            self._update_cache(directory, recursive, max_depth, ignore_patterns, result, timestamps)
-            
-        except Exception as e:
-            self.error_handler.handle_error(
-                e, 
-                {"operation": "cache_set", "directory": directory}, 
-                ErrorSeverity.WARNING
-            )
-    
-    def clear_cache(self, directory: Optional[str] = None):
-        """Clear cache for a specific directory or all cache."""
-        try:
-            if directory:
-                cache_key = self._get_cache_key(directory, True, None, [])
-                cache_file = self._get_cache_file(cache_key)
-                if cache_file.exists():
-                    cache_file.unlink()
+        # Check Git changes first (most reliable)
+        git_changes = self._check_git_changes(directory)
+        
+        # Check file system changes
+        file_system_changes = self._check_file_system_changes(all_files)
+        
+        # Combine changes
+        all_changes = set(git_changes + file_system_changes)
+        
+        # Determine what to process
+        files_to_process = []
+        files_to_skip = []
+        
+        for file_path in all_files:
+            if file_path in all_changes:
+                files_to_process.append(file_path)
+                print(f"  📝 {file_path} - changed, will process")
             else:
-                # Clear all cache files
-                for cache_file in self.cache_dir.glob("*.json"):
-                    cache_file.unlink()
-                    
-        except Exception as e:
-            self.error_handler.handle_error(
-                e, 
-                {"operation": "clear_cache", "directory": directory or "all"}, 
-                ErrorSeverity.WARNING
-            )
+                files_to_skip.append(file_path)
+                print(f"  ✅ {file_path} - unchanged, skipping")
+        
+        print(f"📊 Cache analysis: {len(files_to_process)} files to process, {len(files_to_skip)} files to skip")
+        
+        return files_to_process, files_to_skip
     
-    def get_cache_info(self) -> Dict:
-        """Get information about the cache."""
-        try:
-            cache_files = list(self.cache_dir.glob("*.json"))
-            total_size = sum(f.stat().st_size for f in cache_files if f.exists())
+    def _check_git_changes(self, directory: str) -> List[str]:
+        """Check for Git-based changes."""
+        current_commit = self._get_git_commit_hash(directory)
+        if not current_commit:
+            print("  ⚠️  Not a Git repository, skipping Git change detection")
+            return []
+        
+        # If this is a new repository or first run
+        if not self.cache_state.last_git_commit:
+            print(f"  🆕 First run, will process all files")
+            self.cache_state.last_git_commit = current_commit
+            return []
+        
+        # If commit hasn't changed, no Git changes
+        if current_commit == self.cache_state.last_git_commit:
+            print(f"  ✅ Git commit unchanged: {current_commit[:8]}")
+            return []
+        
+        # Get changed files
+        print(f"  🔄 Git commit changed: {self.cache_state.last_git_commit[:8]} → {current_commit[:8]}")
+        changed_files = self._get_git_changed_files(directory, self.cache_state.last_git_commit)
+        
+        # Update cache state
+        self.cache_state.last_git_commit = current_commit
+        
+        return changed_files
+    
+    def _check_file_system_changes(self, all_files: List[str]) -> List[str]:
+        """Check for file system changes."""
+        changed_files = []
+        
+        for file_path in all_files:
+            if not os.path.exists(file_path):
+                # File was deleted
+                if file_path in self.files_cache:
+                    del self.files_cache[file_path]
+                    changed_files.append(file_path)
+                continue
             
-            return {
-                "cache_directory": str(self.cache_dir),
-                "cache_files": len(cache_files),
-                "total_size_bytes": total_size,
-                "total_size_mb": total_size / (1024 * 1024)
-            }
-        except Exception as e:
-            self.error_handler.handle_error(
-                e, 
-                {"operation": "get_cache_info"}, 
-                ErrorSeverity.WARNING
+            # Check if file is in cache
+            if file_path not in self.files_cache:
+                # New file
+                changed_files.append(file_path)
+                continue
+            
+            # Check modification time
+            current_mtime = os.path.getmtime(file_path)
+            cached_mtime = self.files_cache[file_path].last_modified
+            
+            if current_mtime > cached_mtime:
+                # File modified, check content hash
+                current_hash = self._calculate_file_hash(file_path)
+                cached_hash = self.files_cache[file_path].content_hash
+                
+                if current_hash != cached_hash:
+                    changed_files.append(file_path)
+        
+        return changed_files
+    
+    def update_file_cache(self, file_path: str, chunk_count: int, dependencies: List[str] = None):
+        """Update cache for a processed file."""
+        try:
+            if not os.path.exists(file_path):
+                return
+            
+            mtime = os.path.getmtime(file_path)
+            content_hash = self._calculate_file_hash(file_path)
+            
+            self.files_cache[file_path] = FileCache(
+                file_path=file_path,
+                last_modified=mtime,
+                content_hash=content_hash,
+                chunk_count=chunk_count,
+                dependencies=dependencies or [],
+                last_analyzed=time.time()
             )
-            return {"error": "Failed to get cache info"}
+            
+        except Exception as e:
+            print(f"⚠️  Warning: Could not update cache for {file_path}: {e}")
+    
+    def finalize_analysis(self, total_files: int, total_chunks: int):
+        """Finalize the analysis and update cache state."""
+        self.cache_state.last_analysis_time = time.time()
+        self.cache_state.total_files = total_files
+        self.cache_state.total_chunks = total_chunks
+        
+        # Save caches
+        self._save_cache_state()
+        self._save_files_cache()
+        
+        print(f"💾 Cache updated: {len(self.files_cache)} files, {total_chunks} chunks")
+    
+    def get_cache_stats(self) -> Dict[str, any]:
+        """Get cache statistics."""
+        return {
+            "cached_files": len(self.files_cache),
+            "last_analysis": time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.cache_state.last_analysis_time)),
+            "last_git_commit": self.cache_state.last_git_commit[:8] if self.cache_state.last_git_commit else "None",
+            "total_files_analyzed": self.cache_state.total_files,
+            "total_chunks_generated": self.cache_state.total_chunks,
+            "cache_size_mb": self._get_cache_size_mb()
+        }
+    
+    def _get_cache_size_mb(self) -> float:
+        """Get cache size in MB."""
+        try:
+            total_size = 0
+            for file_path in [self.files_cache_file, self.state_cache_file]:
+                if file_path.exists():
+                    total_size += file_path.stat().st_size
+            
+            # Add ChromaDB size
+            chromadb_dir = self.cache_dir / "chromadb"
+            if chromadb_dir.exists():
+                for root, dirs, files in os.walk(chromadb_dir):
+                    for file in files:
+                        file_path = Path(root) / file
+                        total_size += file_path.stat().st_size
+            
+            return round(total_size / (1024 * 1024), 2)
+        except:
+            return 0.0
+    
+    def clear_cache(self):
+        """Clear all cache data."""
+        try:
+            # Remove cache files
+            if self.files_cache_file.exists():
+                self.files_cache_file.unlink()
+            if self.state_cache_file.exists():
+                self.state_cache_file.unlink()
+            
+            # Clear ChromaDB
+            chromadb_dir = self.cache_dir / "chromadb"
+            if chromadb_dir.exists():
+                import shutil
+                shutil.rmtree(chromadb_dir)
+            
+            # Reset caches
+            self.files_cache = {}
+            self.cache_state = CacheState(
+                last_git_commit="",
+                last_analysis_time=0,
+                total_files=0,
+                total_chunks=0
+            )
+            
+            print("🗑️  Cache cleared successfully")
+            
+        except Exception as e:
+            print(f"❌ Error clearing cache: {e}")
+    
+    def is_cache_valid(self, max_age_hours: int = 24) -> bool:
+        """Check if cache is still valid based on age."""
+        if self.cache_state.last_analysis_time == 0:
+            return False
+        
+        age_hours = (time.time() - self.cache_state.last_analysis_time) / 3600
+        return age_hours < max_age_hours
