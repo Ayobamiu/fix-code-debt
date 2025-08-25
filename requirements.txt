@@ -4,6 +4,9 @@ PyYAML>=6.0
 psutil>=5.8.0
 requests
 
+# Environment management
+python-dotenv>=1.0.0
+
 # AI dependencies
 openai>=1.0.0
 

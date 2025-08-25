@@ -24,7 +24,7 @@ git clone <repository-url>
 cd fix-code-debt
 
 # Install dependencies
-pip install sentence-transformers chromadb numpy
+pip install -r requirements.txt
 ```
 
 ### Basic Usage
@@ -198,6 +198,45 @@ fix-code-debt/
 - **numpy**: For numerical operations
 - **ast**: For Python code parsing
 - **re**: For regex-based parsing
+- **python-dotenv**: For environment variable management
+- **openai**: For AI-powered code generation
+
+## 🔑 Environment Setup
+
+### Required Environment Variables
+
+The tool requires certain environment variables to be set for full functionality:
+
+```bash
+# OpenAI API key (required for AI features)
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Optional environment variables
+CHROMA_DB_PATH=./.iterate_cache/chromadb
+LOG_LEVEL=INFO
+```
+
+### Setting Up Environment Variables
+
+**Option 1: Use the helper script (recommended)**
+```bash
+python3 create_env.py
+```
+
+**Option 2: Create .env file manually**
+Create a `.env` file in your project root:
+```bash
+echo "OPENAI_API_KEY=your_actual_api_key" > .env
+```
+
+**Option 3: Set system environment variables**
+```bash
+export OPENAI_API_KEY=your_actual_api_key
+```
+
+The tool automatically loads environment variables from `.env` files using `python-dotenv`.
+
+> **Note**: The `.env` file is automatically ignored by git for security.
 
 ## 🚀 Future Features
 

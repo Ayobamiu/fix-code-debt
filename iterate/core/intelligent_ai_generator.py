@@ -41,7 +41,6 @@ class IntelligentAIGenerator:
             
             # Initialize components
             self.codebase_intelligence = CodebaseIntelligence(error_handler=self.error_handler)
-            self.ai_generator = AICodeGenerator()
             
             # Initialize dependency mapper with progress reporter
             progress_reporter = ProgressReporter()
@@ -54,6 +53,8 @@ class IntelligentAIGenerator:
             success = self.codebase_intelligence.initialize(directory)
             
             if success:
+                # Create AI generator after environment variables are loaded
+                self.ai_generator = AICodeGenerator()
                 self.initialized = True
                 return True
             else:

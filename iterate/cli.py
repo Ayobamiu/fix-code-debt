@@ -122,6 +122,17 @@ Examples:
         progress_type = ProgressType(args.progress)
     
     try:
+        # Load environment variables early for all operations
+        try:
+            from dotenv import load_dotenv
+            # Try to load from current directory and project directory
+            load_dotenv()  # Load from current directory
+            load_dotenv(args.directory)  # Load from project directory
+            print("🔧 Environment variables loaded from .env files")
+        except ImportError:
+            print("⚠️  python-dotenv not installed. Install with: pip install python-dotenv")
+            print("   Environment variables will only be loaded from system environment.")
+        
         if args.init:
             # Initialize project with default configuration
             from .core.config_manager import ConfigManager
