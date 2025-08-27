@@ -1,0 +1,64 @@
+{
+  "name": "demo_template",
+  "description": "Template for 5 duplicate groups",
+  "groups": [
+    {
+      "id": "group_input validation_1",
+      "name": "Validation Logic Extraction",
+      "description": "Refactor 3 duplicate occurrences across 1 files",
+      "duplicates": [
+        {
+          "id": "dup_001",
+          "description": "User input validation logic",
+          "pattern": "input validation",
+          "occurrence_count": 3,
+          "similarity_score": 0.85,
+          "refactoring_type": "extract_method",
+          "estimated_effort": "1-2 hours",
+          "impact": "Medium: Reduced duplication, easier testing",
+          "suggestion": "Create shared validation module 'iterate/utils/validation.py'",
+          "severity": "medium",
+          "target_files": [
+            {
+              "file_path": "iterate/core/analyzer.py",
+              "function_name": "validate_input",
+              "line_start": 45,
+              "line_end": 52,
+              "complexity": 3
+            },
+            {
+              "file_path": "iterate/core/refactor.py",
+              "function_name": "validate_input",
+              "line_start": 78,
+              "line_end": 85,
+              "complexity": 3
+            },
+            {
+              "file_path": "iterate/core/testgen.py",
+              "function_name": "validate_input",
+              "line_start": 112,
+              "line_end": 119,
+              "complexity": 3
+            }
+          ],
+          "code_snippets": [
+            {
+              "file_path": "iterate/core/analyzer.py",
+              "function_name": "validate_input",
+              "code_preview": "def validate_input(data):\n    if not data:\n        raise ValueError('Data cannot be empty')\n    return True",
+              "total_lines": 8
+            }
+          ]
+        }
+      ],
+      "total_effort": "1.5 hours",
+      "total_impact": "Low: Code organization and minor improvements",
+      "pattern_type": "input validation",
+      "files_affected": [
+        "iterate/core/analyzer.py",
+        "iterate/core/testgen.py",
+        "iterate/core/refactor.py"
+      ],
+      "estimated_effort_hours": 1.5,
+      "severity": "medium",
+      "created_at": 

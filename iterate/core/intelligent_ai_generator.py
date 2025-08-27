@@ -111,7 +111,7 @@ class IntelligentAIGenerator:
             return []
     
     def find_duplicate_code(self) -> List[Dict[str, Any]]:
-        """Find duplicate code patterns using semantic similarity."""
+        """Find duplicate code patterns using semantic similarity and return structured data."""
         if not self.initialized:
             return []
         
@@ -122,20 +122,28 @@ class IntelligentAIGenerator:
             if summary["total_chunks"] == 0:
                 return []
             
-            # Query for similar patterns
+            # Query for similar patterns with more specific searches
             duplicates = []
+            duplicate_id = 1
             
-            # Look for common patterns
+            # More specific patterns for better detection
             patterns = [
                 "input validation",
-                "error handling",
+                "error handling", 
                 "data processing",
                 "utility functions",
-                "configuration loading"
+                "configuration loading",
+                "file operations",
+                "logging setup",
+                "database connection",
+                "API client",
+                "data transformation",
+                "formatting functions",
+                "parsing logic"
             ]
             
             for pattern in patterns:
-                context = self.codebase_intelligence.query_codebase(pattern, max_results=10)
+                context = self.codebase_intelligence.query_codebase(pattern, max_results=15)
                 
                 if len(context.relevant_chunks) > 1:
                     # Group by similarity
@@ -143,19 +151,163 @@ class IntelligentAIGenerator:
                     
                     for group in grouped_chunks:
                         if len(group) > 1:
+                            # Calculate similarity score
+                            similarity_score = self._calculate_similarity_score(group)
+                            
+                            # Determine severity based on occurrence count and similarity
+                            severity = self._determine_severity(len(group), similarity_score)
+                            
+                            # Get refactoring type
+                            refactoring_type = self._determine_refactoring_type(group)
+                            
+                            # Estimate effort
+                            estimated_effort = self._estimate_effort(len(group), similarity_score)
+                            
+                            # Create structured duplicate entry
                             duplicate = {
-                                "function_name": pattern,
-                                "occurrences": len(group),
-                                "files": [chunk.file_path for chunk in group],
-                                "suggestion": f"Consider extracting '{pattern}' into a shared utility function"
+                                "id": f"dup_{duplicate_id:03d}",
+                                "type": "duplicate_code",
+                                "severity": severity,
+                                "description": f"{pattern.title()} logic duplicated across {len(group)} locations",
+                                "pattern": pattern,
+                                "occurrence_count": len(group),
+                                "similarity_score": similarity_score,
+                                "target_files": self._create_target_files_info(group),
+                                "refactoring_type": refactoring_type,
+                                "suggestion": self._generate_refactoring_suggestion(pattern, len(group)),
+                                "estimated_effort": estimated_effort,
+                                "impact": self._assess_impact(len(group), similarity_score),
+                                "code_snippets": self._extract_code_snippets(group)
                             }
+                            
                             duplicates.append(duplicate)
+                            duplicate_id += 1
             
             return duplicates
             
         except Exception as e:
             self.error_handler.handle_error(e, {"operation": "find_duplicate_code"})
             return []
+    
+    def _calculate_similarity_score(self, chunks) -> float:
+        """Calculate similarity score between chunks (0.0 to 1.0)."""
+        if len(chunks) < 2:
+            return 0.0
+        
+        # Simple similarity based on function names and types
+        # In a real implementation, you'd use embeddings comparison
+        base_score = 0.7  # Base similarity for semantic matches
+        
+        # Boost score if function names are identical
+        function_names = [chunk.function_name for chunk in chunks if chunk.function_name]
+        if len(set(function_names)) == 1:
+            base_score += 0.2
+        
+        # Boost score if chunk types are identical
+        chunk_types = [chunk.chunk_type for chunk in chunks]
+        if len(set(chunk_types)) == 1:
+            base_score += 0.1
+        
+        return min(1.0, base_score)
+    
+    def _determine_severity(self, occurrence_count: int, similarity_score: float) -> str:
+        """Determine severity level based on occurrence count and similarity."""
+        if occurrence_count >= 5 or similarity_score >= 0.9:
+            return "critical"
+        elif occurrence_count >= 3 or similarity_score >= 0.8:
+            return "high"
+        elif occurrence_count >= 2 or similarity_score >= 0.7:
+            return "medium"
+        else:
+            return "low"
+    
+    def _determine_refactoring_type(self, chunks) -> str:
+        """Determine the best refactoring approach."""
+        chunk_types = [chunk.chunk_type for chunk in chunks]
+        
+        if "function" in chunk_types:
+            return "extract_method"
+        elif "class" in chunk_types:
+            return "extract_class"
+        elif "import" in chunk_types:
+            return "consolidate_imports"
+        else:
+            return "extract_utility"
+    
+    def _estimate_effort(self, occurrence_count: int, similarity_score: float) -> str:
+        """Estimate refactoring effort."""
+        if occurrence_count <= 2:
+            return "1-2 hours"
+        elif occurrence_count <= 4:
+            return "3-5 hours"
+        elif occurrence_count <= 6:
+            return "6-8 hours"
+        else:
+            return "1-2 days"
+    
+    def _assess_impact(self, occurrence_count: int, similarity_score: float) -> str:
+        """Assess the impact of refactoring."""
+        if occurrence_count >= 5:
+            return "High: Significant maintenance reduction, improved consistency"
+        elif occurrence_count >= 3:
+            return "Medium: Reduced duplication, easier testing"
+        else:
+            return "Low: Minor improvement in code organization"
+    
+    def _create_target_files_info(self, chunks) -> List[Dict[str, Any]]:
+        """Create structured information about target files."""
+        target_files = []
+        
+        for chunk in chunks:
+            file_info = {
+                "file_path": chunk.file_path,
+                "line_start": chunk.line_start,
+                "line_end": chunk.line_end,
+                "function_name": chunk.function_name or "unknown",
+                "chunk_type": chunk.chunk_type,
+                "complexity": getattr(chunk, 'complexity', 0)
+            }
+            target_files.append(file_info)
+        
+        return target_files
+    
+    def _extract_code_snippets(self, chunks) -> List[Dict[str, Any]]:
+        """Extract code snippets for context."""
+        snippets = []
+        
+        for chunk in chunks:
+            # Get first few lines of the chunk for context
+            lines = chunk.content.split('\n')
+            snippet_lines = lines[:min(5, len(lines))]  # First 5 lines
+            
+            snippet = {
+                "file_path": chunk.file_path,
+                "function_name": chunk.function_name or "unknown",
+                "code_preview": '\n'.join(snippet_lines),
+                "total_lines": len(lines)
+            }
+            snippets.append(snippet)
+        
+        return snippets
+    
+    def _generate_refactoring_suggestion(self, pattern: str, occurrence_count: int) -> str:
+        """Generate specific refactoring suggestions."""
+        suggestions = {
+            "input validation": f"Create shared validation module 'iterate/utils/validation.py' with common validation functions",
+            "error handling": f"Extract error handling logic into 'iterate/utils/error_utils.py' for consistent error management",
+            "data processing": f"Create data processing utilities in 'iterate/utils/data_utils.py' to eliminate duplication",
+            "utility functions": f"Move common utilities to 'iterate/utils/common.py' for better reusability",
+            "configuration loading": f"Create centralized configuration management in 'iterate/config/loader.py'",
+            "file operations": f"Extract file operations to 'iterate/utils/file_utils.py' for consistent file handling",
+            "logging setup": f"Create shared logging configuration in 'iterate/utils/logging_config.py'",
+            "database connection": f"Implement connection pooling in 'iterate/database/connection.py'",
+            "API client": f"Create reusable API client base class in 'iterate/api/base_client.py'",
+            "data transformation": f"Extract transformation logic to 'iterate/utils/transformers.py'",
+            "formatting functions": f"Create formatting utilities in 'iterate/utils/formatters.py'",
+            "parsing logic": f"Extract parsing logic to 'iterate/utils/parsers.py'"
+        }
+        
+        return suggestions.get(pattern, f"Consider extracting '{pattern}' into a shared utility module")
     
     def suggest_cross_file_refactoring(self) -> List[Dict[str, Any]]:
         """Suggest cross-file refactoring opportunities."""
@@ -243,7 +395,9 @@ class IntelligentAIGenerator:
     
     def get_codebase_insights(self) -> Dict[str, Any]:
         """Get comprehensive codebase insights."""
+        print(f"🔍 Debug: intelligent_generator.get_codebase_insights called, initialized={self.initialized}")
         if not self.initialized:
+            print("🔍 Debug: intelligent_generator not initialized, returning empty insights")
             return {"summary": {"total_chunks": 0, "unique_files": 0, "functions": 0, "classes": 0, "imports": 0, "average_complexity": 0.0, "high_complexity_functions": 0}, "total_duplicates": 0, "total_opportunities": 0}
         
         try:

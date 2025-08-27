@@ -6,6 +6,7 @@ import argparse
 import sys
 from typing import List
 from .core.progress_reporter import ProgressType
+from .core.duplicate_pr_manager import DuplicatePRManager
 from .utils.display import print_directory_contents
 from .utils.monitoring import monitor_directory
 
@@ -98,9 +99,21 @@ Examples:
     parser.add_argument("--intelligent-refactor", help="Generate intelligent refactoring suggestions")
     parser.add_argument("--find-duplicates", action="store_true", help="Find duplicate code patterns")
     parser.add_argument("--cross-file-refactor", action="store_true", help="Suggest cross-file refactoring opportunities")
-    parser.add_argument("--context-aware-tests", help="Generate context-aware tests for a file")
-    parser.add_argument("--codebase-insights", action="store_true", help="Get insights about the codebase")
-    parser.add_argument("--update-context", help="Update context for a specific file")
+    
+    # Duplicate PR management
+    parser.add_argument("--create-pr", action="store_true", help="Create GitHub PR from duplicate findings")
+    parser.add_argument("--group-duplicates", action="store_true", help="Group duplicates for PR creation")
+    parser.add_argument("--max-per-group", type=int, default=3, help="Maximum duplicates per group (default: 3)")
+    parser.add_argument("--auto-group", action="store_true", help="Automatically group duplicates without user input")
+    parser.add_argument("--save-template", help="Save current duplicate grouping as a template")
+    parser.add_argument("--load-template", help="Load a saved duplicate grouping template")
+    parser.add_argument("--list-templates", action="store_true", help="List available duplicate grouping templates")
+    parser.add_argument("--weekly-scan", action="store_true", help="Run weekly duplicate scan and group for PR creation")
+    
+    # Cache management
+    parser.add_argument("--cache-stats", action="store_true", help="Show cache statistics")
+    parser.add_argument("--clear-cache", action="store_true", help="Clear all cache data")
+    parser.add_argument("--cache-info", action="store_true", help="Show detailed cache information")
     # Verbosity
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     parser.add_argument("-q", "--quiet", action="store_true", help="Quiet output")
@@ -207,36 +220,64 @@ Examples:
             )
             
             if args.analyze_deps:
-                print(f"🔍 Analyzing dependencies in: {args.directory}")
-                
-                # First, do a file discovery scan to show accurate counts
-                file_finder = analyzer.file_finder
-                discovery_result = file_finder.find_files_and_folders(
-                    args.directory, 
-                    max_depth=args.max_depth
-                )
-                total_files_found = len(discovery_result.get('files', []))
-                total_dirs_found = len(discovery_result.get('folders', []))
-                
-                print(f"📁 File Discovery: {total_files_found} files, {total_dirs_found} directories")
-                
-                # Now do dependency analysis
-                dependencies, all_files = analyzer.analyze_codebase()
-                analyzer.print_analysis_summary(dependencies, all_files)
-                
-                if args.export_deps:
-                    analyzer.export_analysis(dependencies, args.export_deps)
-                    
-            elif args.impact:
-                print(f"🎯 Impact analysis for: {args.impact}")
-                impacted_files = analyzer.get_impact_analysis(args.impact)
-                if impacted_files:
-                    print(f"Files that would be impacted:")
-                    for file_path in impacted_files:
-                        print(f"  - {file_path}")
+                print("🔍 Analyzing dependencies...")
+                dependencies = analyzer.analyze_dependencies()
+                if dependencies:
+                    print(f"✅ Found {len(dependencies)} dependency relationships")
+                    for dep in dependencies[:10]:  # Show first 10
+                        print(f"   📄 {dep.source} -> {dep.target}")
+                    if len(dependencies) > 10:
+                        print(f"   ... and {len(dependencies) - 10} more")
                 else:
-                    print("No files would be impacted by changes to this file.")
+                    print("ℹ️  No dependencies found")
+            
+            if args.export_deps:
+                print(f"📤 Exporting dependencies to: {args.export_deps}")
+                success = analyzer.export_dependencies(args.export_deps)
+                if success:
+                    print("✅ Dependencies exported successfully")
+                else:
+                    print("❌ Failed to export dependencies")
+            
+            if args.impact:
+                print(f"🎯 Analyzing impact for: {args.impact}")
+                impact = analyzer.analyze_impact(args.impact)
+                if impact:
+                    print(f"📊 Impact analysis for {args.impact}:")
+                    print(f"   📁 Files affected: {len(impact.affected_files)}")
+                    print(f"   🔗 Dependencies: {len(impact.dependencies)}")
+                    print(f"   ⚠️  Risk level: {impact.risk_level}")
+                else:
+                    print("ℹ️  No impact analysis available")
         
+        elif args.list_templates or args.save_template or args.load_template or args.weekly_scan:
+            # Template management mode
+            from .core.duplicate_pr_manager import DuplicatePRManager
+            from .core.error_handler import ErrorHandler
+            
+            error_handler = ErrorHandler()
+            pr_manager = DuplicatePRManager(error_handler=error_handler)
+            
+            if args.list_templates:
+                print("📚 Available duplicate grouping templates:")
+                templates = pr_manager.list_templates()
+                if templates:
+                    for i, template in enumerate(templates, 1):
+                        print(f"   {i}. {template}")
+                else:
+                    print("   No templates found")
+            
+            if args.save_template:
+                print(f"💾 Saving duplicate grouping as template: {args.save_template}")
+                print("   Use --find-duplicates --group-duplicates first to create a grouping")
+            
+            if args.load_template:
+                print(f"📂 Loading template: {args.load_template}")
+                print("   Use --create-pr to create a PR from this template")
+            
+            if args.weekly_scan:
+                print("📅 Running weekly duplicate scan...")
+                print("   Use --find-duplicates --group-duplicates to see the results")
         # GitHub MCP integration
         elif args.github_analysis or args.github_issues or args.github_pr_comments:
             print("🔍 Starting GitHub MCP repository analysis...")
@@ -265,23 +306,28 @@ Examples:
                 else:
                     print("ℹ️  No high debt pull requests found")
         # Intelligent codebase features
-        elif args.intelligence or args.intelligent_refactor or args.find_duplicates or args.cross_file_refactor or args.context_aware_tests or args.codebase_insights or args.update_context:
+        elif args.intelligence or args.intelligent_refactor or args.find_duplicates or args.cross_file_refactor or args.create_pr or args.group_duplicates or args.weekly_scan:
             print("🧠 Initializing Intelligent Codebase Features...")
             from .core.intelligent_ai_generator import IntelligentAIGenerator
             from .core.error_handler import ErrorHandler
+            from .core.duplicate_pr_manager import DuplicatePRManager
             
             error_handler = ErrorHandler()
             intelligent_generator = IntelligentAIGenerator(error_handler=error_handler)
             
-            # Initialize codebase intelligence
-            if args.intelligence:
-                print("🔍 Initializing codebase intelligence system...")
-                success = intelligent_generator.initialize_codebase(args.directory)
-                if success:
-                    print("✅ Codebase intelligence initialized successfully!")
-                else:
-                    print("❌ Failed to initialize codebase intelligence")
-                    return
+            # Initialize duplicate PR manager if needed
+            duplicate_pr_manager = None
+            if args.create_pr or args.group_duplicates or args.weekly_scan:
+                duplicate_pr_manager = DuplicatePRManager(error_handler=error_handler)
+            
+            # Initialize codebase intelligence (always initialize for any intelligent feature)
+            print("🔍 Initializing codebase intelligence system...")
+            success = intelligent_generator.initialize_codebase(args.directory)
+            if success:
+                print("✅ Codebase intelligence initialized successfully!")
+            else:
+                print("❌ Failed to initialize codebase intelligence")
+                return
             
             # Generate intelligent refactoring suggestions
             if args.intelligent_refactor:
@@ -303,14 +349,187 @@ Examples:
                 print("🔍 Finding duplicate code patterns...")
                 duplicates = intelligent_generator.find_duplicate_code()
                 if duplicates:
-                    print(f"🎯 Found {len(duplicates)} duplicate patterns:")
-                    for duplicate in duplicates:
-                        print("📁 Function: " + duplicate.get("function_name", ""))
-                        print("   Occurrences: " + str(duplicate.get("occurrences", 0)))
-                        print("   Files: " + ", ".join(duplicate.get("files", [])))
-                        print("   Suggestion: " + duplicate.get("suggestion", ""))
+                    print(f"🎯 Found {len(duplicates)} duplicate patterns:\n")
+                    
+                    # Sort by severity (critical -> high -> medium -> low)
+                    severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+                    sorted_duplicates = sorted(duplicates, key=lambda x: severity_order.get(x.get('severity', 'low'), 4))
+                    
+                    for duplicate in sorted_duplicates:
+                        # Severity emoji
+                        severity_emoji = {
+                            "critical": "🔴",
+                            "high": "🟠", 
+                            "medium": "🟡",
+                            "low": "🟢"
+                        }
+                        
+                        print(f"{severity_emoji.get(duplicate.get('severity', 'low'), '⚪')} {duplicate.get('severity', 'unknown').upper()} - {duplicate.get('description', 'Unknown')}")
+                        print(f"   ID: {duplicate.get('id', 'unknown')}")
+                        print(f"   Pattern: {duplicate.get('pattern', 'unknown')}")
+                        print(f"   Occurrences: {duplicate.get('occurrence_count', 0)}")
+                        print(f"   Similarity: {duplicate.get('similarity_score', 0):.1%}")
+                        print(f"   Refactoring Type: {duplicate.get('refactoring_type', 'unknown')}")
+                        print(f"   Estimated Effort: {duplicate.get('estimated_effort', 'unknown')}")
+                        print(f"   Impact: {duplicate.get('impact', 'unknown')}")
+                        print(f"   Suggestion: {duplicate.get('suggestion', 'unknown')}")
+                        
+                        # Show target files
+                        print("   Target Files:")
+                        for target_file in duplicate.get('target_files', []):
+                            print(f"     📄 {target_file.get('file_path', 'unknown')}")
+                            print(f"        Function: {target_file.get('function_name', 'unknown')}")
+                            print(f"        Lines: {target_file.get('line_start', 0)}-{target_file.get('line_end', 0)}")
+                            print(f"        Complexity: {target_file.get('complexity', 0)}")
+                        
+                        # Show code snippets
+                        print("   Code Snippets:")
+                        for snippet in duplicate.get('code_snippets', [])[:2]:  # Show first 2 snippets
+                            print(f"     📝 {snippet.get('file_path', 'unknown')} - {snippet.get('function_name', 'unknown')}")
+                            print(f"        {snippet.get('code_preview', '')[:100]}...")
+                        
+                        print("-" * 80)
+                    
+                    # Handle duplicate PR management if requested
+                    if duplicate_pr_manager and (args.create_pr or args.group_duplicates):
+                        print("\n🎯 Duplicate PR Management Options:")
+                        print("   • Use --create-pr to create a GitHub PR from these duplicates")
+                        print("   • Use --group-duplicates to group duplicates for PR creation")
+                        print("   • Use --max-per-group N to set maximum duplicates per group")
+                        
                 else:
                     print("ℹ️  No duplicate code patterns found")
+            
+            # Group duplicates for PR creation
+            if args.group_duplicates and duplicate_pr_manager:
+                print("\n🔍 Grouping duplicates for PR creation...")
+                duplicates = intelligent_generator.find_duplicate_code()
+                if duplicates:
+                    groups = duplicate_pr_manager.group_duplicates(duplicates, args.max_per_group)
+                    if groups:
+                        print(f"✅ Created {len(groups)} duplicate groups")
+                        
+                        # Display grouping options
+                        duplicate_pr_manager.display_grouping_options(groups)
+                        
+                        # Get user selection if not auto-group
+                        if not args.auto_group:
+                            selected_groups = duplicate_pr_manager.get_user_selection(groups)
+                        else:
+                            selected_groups = groups
+                            print(f"✅ Auto-selected all {len(groups)} groups")
+                        
+                        # Save template if requested
+                        if args.save_template and selected_groups:
+                            duplicate_pr_manager.save_template(args.save_template, selected_groups)
+                        
+                        # Create PR if requested
+                        if args.create_pr and selected_groups:
+                            print("\n🚀 Creating GitHub PR from selected duplicate groups...")
+                            pr_template = duplicate_pr_manager.create_pr_template(selected_groups)
+                            if pr_template:
+                                success = duplicate_pr_manager.create_github_pr(pr_template, selected_groups)
+                                if success:
+                                    print("✅ GitHub PR created successfully!")
+                                else:
+                                    print("❌ Failed to create GitHub PR")
+                            else:
+                                print("❌ Failed to create PR template")
+                    else:
+                        print("❌ Failed to group duplicates")
+                else:
+                    print("ℹ️  No duplicates found to group")
+            
+            # Create PR directly from duplicates
+            if args.create_pr and not args.group_duplicates and duplicate_pr_manager:
+                print("\n🚀 Creating GitHub PR from duplicate findings...")
+                duplicates = intelligent_generator.find_duplicate_code()
+                if duplicates:
+                    # Auto-group duplicates
+                    groups = duplicate_pr_manager.group_duplicates(duplicates, args.max_per_group)
+                    if groups:
+                        print(f"✅ Auto-grouped {len(duplicates)} duplicates into {len(groups)} groups")
+                        
+                        # Create PR template
+                        pr_template = duplicate_pr_manager.create_pr_template(groups)
+                        if pr_template:
+                            success = duplicate_pr_manager.create_github_pr(pr_template, groups)
+                            if success:
+                                print("✅ GitHub PR created successfully!")
+                            else:
+                                print("❌ Failed to create GitHub PR")
+                        else:
+                            print("❌ Failed to create PR template")
+                    else:
+                        print("❌ Failed to group duplicates")
+                else:
+                    print("ℹ️  No duplicates found to create PR from")
+            
+            # Load template
+            if args.load_template and duplicate_pr_manager:
+                print(f"\n📂 Loading template: {args.load_template}")
+                groups = duplicate_pr_manager.load_template(args.load_template)
+                if groups:
+                    print(f"✅ Loaded template with {len(groups)} groups")
+                    
+                    # Display loaded groups
+                    duplicate_pr_manager.display_grouping_options(groups)
+                    
+                    # Create PR if requested
+                    if args.create_pr:
+                        print("\n🚀 Creating GitHub PR from loaded template...")
+                        pr_template = duplicate_pr_manager.create_pr_template(groups)
+                        if pr_template:
+                            success = duplicate_pr_manager.create_github_pr(pr_template, groups)
+                            if success:
+                                print("✅ GitHub PR created successfully!")
+                            else:
+                                print("❌ Failed to create GitHub PR")
+                        else:
+                            print("❌ Failed to create PR template")
+                else:
+                    print("❌ Failed to load template")
+            
+            # List templates
+            if args.list_templates and duplicate_pr_manager:
+                print("\n📚 Available duplicate grouping templates:")
+                templates = duplicate_pr_manager.list_templates()
+                if templates:
+                    for i, template in enumerate(templates, 1):
+                        print(f"   {i}. {template}")
+                else:
+                    print("   No templates found")
+            
+            # Weekly scan
+            if args.weekly_scan and duplicate_pr_manager:
+                print("\n📅 Running weekly duplicate scan...")
+                duplicates = intelligent_generator.find_duplicate_code()
+                if duplicates:
+                    print(f"🔍 Found {len(duplicates)} duplicates in weekly scan")
+                    
+                    # Group duplicates
+                    groups = duplicate_pr_manager.group_duplicates(duplicates, args.max_per_group)
+                    if groups:
+                        print(f"✅ Grouped into {len(groups)} manageable chunks")
+                        
+                        # Display weekly summary
+                        print("\n📊 Weekly Duplicate Summary:")
+                        total_effort = sum(group.estimated_effort_hours for group in groups)
+                        total_files = len(set().union(*[set(group.files_affected) for group in groups]))
+                        
+                        print(f"   📁 Total files affected: {total_files}")
+                        print(f"   ⏱️  Total estimated effort: {total_effort:.1f} hours")
+                        print(f"   🎯 Groups ready for PR creation: {len(groups)}")
+                        
+                        # Ask if user wants to create PRs
+                        print("\n🎯 Would you like to create PRs for these groups?")
+                        print("   • Use --create-pr to create PRs now")
+                        print("   • Use --save-template weekly_scan to save for later")
+                        
+                    else:
+                        print("❌ Failed to group duplicates")
+                else:
+                    print("ℹ️  No duplicates found in weekly scan")
             
             # Cross-file refactoring suggestions
             if args.cross_file_refactor:
@@ -325,44 +544,36 @@ Examples:
                 else:
                     print("ℹ️  No cross-file refactoring opportunities found")
             
-            # Generate context-aware tests
-            if args.context_aware_tests:
-                print(f"🧪 Generating context-aware tests for: {args.context_aware_tests}")
-                test_code = intelligent_generator.generate_context_aware_tests(args.context_aware_tests)
-                if test_code:
-                    print("✅ Generated context-aware test code:")
-                    print("```python")
-                    print(test_code)
-                    print("```")
-                else:
-                    print("ℹ️  No context-aware tests generated")
-            
-            # Get codebase insights
-            if args.codebase_insights:
-                print("📊 Getting codebase insights...")
+            # Cache management
+            if args.cache_stats:
+                print("📊 Cache Statistics:")
                 insights = intelligent_generator.get_codebase_insights()
-                if insights:
-                    summary = insights.get("summary", {})
-                    print("📁 Total chunks: " + str(summary.get("total_chunks", 0)))
-                    print("📄 Unique files: " + str(summary.get("unique_files", 0)))
-                    print("🔧 Functions: " + str(summary.get("functions", 0)))
-                    print("🏗️  Classes: " + str(summary.get("classes", 0)))
-                    print("📦 Imports: " + str(summary.get("imports", 0)))
-                    print("📊 Average complexity: " + str(round(summary.get("average_complexity", 0), 1)))
-                    print("⚠️  High complexity functions: " + str(summary.get("high_complexity_functions", 0)))
-                    print("🔄 Duplicates found: " + str(insights.get("total_duplicates", 0)))
-                    print("🎯 Cross-file opportunities: " + str(insights.get("total_opportunities", 0)))
+                cache_stats = insights.get("summary", {}).get("cache_stats", {})
+                if cache_stats:
+                    print(f"  📁 Cached files: {cache_stats.get('cached_files', 0)}")
+                    print(f"  🕒 Last analysis: {cache_stats.get('last_analysis', 'Never')}")
+                    print(f"  🔄 Last Git commit: {cache_stats.get('last_git_commit', 'None')}")
+                    print(f"  📊 Total files analyzed: {cache_stats.get('total_files_analyzed', 0)}")
+                    print(f"  🧩 Total chunks generated: {cache_stats.get('total_chunks_generated', 0)}")
+                    print(f"  💾 Cache size: {cache_stats.get('cache_size_mb', 0)} MB")
                 else:
-                    print("ℹ️  No insights available")
+                    print("  ℹ️  No cache statistics available")
             
-            # Update context for a specific file
-            if args.update_context:
-                print(f"🔄 Updating context for: {args.update_context}")
-                success = intelligent_generator.update_context_for_file(args.update_context)
+            if args.clear_cache:
+                print("🗑️  Clearing cache...")
+                success = intelligent_generator.clear_cache()
                 if success:
-                    print("✅ Context updated successfully!")
+                    print("✅ Cache cleared successfully!")
                 else:
-                    print("ℹ️  No changes detected or update failed")
+                    print("❌ Failed to clear cache")
+            
+            if args.cache_info:
+                print("ℹ️  Cache Information:")
+                print("  📁 Cache directory: .iterate_cache/")
+                print("  🗄️  Vector database: ChromaDB")
+                print("  🔍 Change detection: Git + File system monitoring")
+                print("  ⚡ Smart caching: Only processes changed files")
+                print("  💾 Cache persistence: JSON + ChromaDB")
                     
         else:
             # Scan mode
